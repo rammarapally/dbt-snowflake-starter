@@ -1,0 +1,148 @@
+# dbt Project Configuration
+# Comprehensive dbt project configuration for Snowflake data warehouse
+# Author: Ram Marapally (GitHub: rammarapally)
+
+# Project metadata
+name: 'dbt_snowflake_starter'
+version: '1.0.0'
+config-version: 2
+profile: 'dbt_snowflake_starter'
+
+# Model configuration root path
+model-paths: ["models"]
+analysis-paths: ["analysis"]
+test-paths: ["tests"]
+data-paths: ["data"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+  - "logs"
+
+# Database and schema configuration
+vars:
+  # Custom schema naming strategy - set to true to enable custom logic
+  custom_schema_logic: true
+
+  # Environment variable for dynamic target assignment
+  environment: "{{ env_var('DBT_ENV', 'dev') }}"
+
+  # Default variable configurations
+  enable_pii_masking: false
+  date_column_name: "dbt_created_at"
+
+  # Snowflake-specific optimizations
+  enable_incremental_full_refresh: false
+  incremental_lookback_days: 7
+
+# Global model configuration
+models:
+  dbt_snowflake_starter:
+    # Global materialization defaults
+    materialized: view
+
+    # Staging models configuration
+    staging:
+      # Staging models are primarily incremental tables
+      materialized: incremental
+      unique_key: null
+      on_schema_change: fail
+      incremental_strategy: merge
+
+      # dbt configurations
+      pre-hook: "{{ set_query_tag() }}"
+      post-hook: "{{ unset_query_tag() }}"
+
+      # Tagging for organization and selective runs
+      tags:
+        - staging
+        - daily
+
+      # Columns meta for documentation
+      columns:
+        dbt_valid_from:
+          description: "Timestamp when the record became valid"
+        dbt_valid_to:
+          description: "Timestamp when the record became invalid (null if current)"
+        dbt_created_at:
+          description: "Timestamp when the record was created"
+
+    # Marts models configuration
+    marts:
+      # Dimensions use full refresh tables
+      dim_*:
+        materialized: table
+        unique_key: null
+        on_schema_change: fail
+
+        pre-hook: "{{ set_query_tag() }}"
+        post-hook: "{{ unset_query_tag() }}"
+
+        tags:
+          - marts
+          - daily
+
+      # Facts use incremental materializations
+      fct_*:
+        materialized: incremental
+        unique_key: null
+        on_schema_change: fail
+        incremental_strategy: merge
+
+        pre-hook: "{{ set_query_tag() }}"
+        post-hook: "{{ unset_query_tag() }}"
+
+        tags:
+          - marts
+          - daily
+
+# Seeds configuration (for loading CSV data)
+seeds:
+  dbt_snowflake_starter:
+    # Seeds are loaded as tables by default
+    materialized: table
+    schema: seeds
+    post-hook: "{{ unset_query_tag() }}"
+
+# Snapshots configuration (for tracking changes over time)
+snapshots:
+  dbt_snowflake_starter:
+    schema: snapshots
+    tags:
+      - snapshots
+      - weekly
+
+# Tests configuration
+tests:
+  # Generic tests from tests/generic
+  dbt_snowflake_starter:
+    schema: data_quality
+    tags:
+      - data_quality
+
+  # Schema tests (in schema.yml)
+  dbt_snowflake_starter:
+    +severity: warn
+    +store_failures: true
+
+# Require specific dbt version
+require-dbt-version: [">=1.5.0", "<2.0.0"]
+
+# Dispatch configuration for package macros
+dispatch:
+  - macro_namespace: dbt_utils
+    search_order: ['dbt_snowflake_starter', 'dbt_utils']
+
+# Quoting strategy for Snowflake
+quoting:
+  identifier: true
+  schema: true
+
+# Unit tests configuration (dbt 1.8+)
+# Uncomment when using dbt 1.8 or later
+# unit_tests:
+#   materializations: [sql]
+#   store_failures: true
+#   tags: [unit_tests]

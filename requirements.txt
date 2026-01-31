@@ -1,0 +1,46 @@
+# dbt-snowflake-starter Requirements
+# Author: Ram Marapally (GitHub: rammarapally)
+#
+# Python dependencies for dbt and Snowflake development
+# Install with: pip install -r requirements.txt
+
+# dbt Core and Snowflake adapter
+dbt-core>=1.5.0,<2.0.0
+dbt-snowflake>=1.5.0,<2.0.0
+
+# dbt packages and utilities
+dbt-utils>=1.1.0
+dbt-expectations>=0.8.0
+
+# Data manipulation and analysis
+pandas>=1.5.0
+numpy>=1.24.0
+
+# Testing and quality
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# Code formatting and linting
+black>=23.0.0
+flake8>=6.0.0
+isort>=5.12.0
+
+# Type checking
+mypy>=1.0.0
+
+# YAML handling
+pyyaml>=6.0
+
+# Logging and monitoring
+python-logging-loki>=0.3.2
+
+# Development tools
+ipython>=8.0.0
+jupyter>=1.0.0
+
+# Optional: For dbt Cloud integration
+dbt-cloud-cli>=0.1.0
+
+# Optional: For advanced Snowflake operations
+snowflake-connector-python>=3.0.0
+snowflake-sqlalchemy>=1.4.0

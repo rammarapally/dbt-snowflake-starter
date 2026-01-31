@@ -1,0 +1,155 @@
+# dbt Profiles Configuration - Snowflake
+# Example configuration for connecting dbt to Snowflake
+# Author: Ram Marapally (GitHub: rammarapally)
+#
+# INSTRUCTIONS:
+# 1. Copy this file to ~/.dbt/profiles.yml
+# 2. Replace placeholder values with your Snowflake credentials
+# 3. Run 'dbt debug' to verify the connection
+# 4. Do NOT commit profiles.yml to version control (add to .gitignore)
+
+dbt_snowflake_starter:
+  # Target specifies which output to use by default
+  target: dev
+
+  # Output configurations for different environments
+  outputs:
+    # Development environment
+    dev:
+      type: snowflake
+
+      # Snowflake account identifier
+      # Format: xy12345 or xy12345.us-east-1
+      # Find in your Snowflake URL: https://xy12345.us-east-1.snowflakecomputing.com
+      account: [YOUR_SNOWFLAKE_ACCOUNT_ID]
+
+      # Snowflake username
+      user: [YOUR_SNOWFLAKE_USERNAME]
+
+      # Snowflake password
+      password: [YOUR_SNOWFLAKE_PASSWORD]
+
+      # Snowflake database where dbt models will be created
+      database: [YOUR_DEV_DATABASE_NAME]
+
+      # Schema where dbt models will be created by default
+      # Note: dbt may create additional schemas based on the model layer
+      schema: dbt_dev
+
+      # Warehouse used for running queries
+      warehouse: [YOUR_WAREHOUSE_NAME]
+
+      # Snowflake role with appropriate permissions
+      role: [YOUR_ROLE_NAME]
+
+      # Number of parallel threads for dbt execution
+      # Recommended: 4-8 for development, adjust based on warehouse size
+      threads: 4
+
+      # Keep-alive behavior for client sessions
+      # Set to true if you experience session timeout issues
+      client_session_keep_alive: false
+
+      # Optional: Query timeout in seconds
+      # query_tag: dbt_dev
+
+      # Optional: Enable/disable connection pooling
+      # connection_health_checks: true
+
+      # Optional: Comment to identify queries in Snowflake query history
+      # query_comment: "dbt run from dev environment"
+
+    # Staging environment
+    staging:
+      type: snowflake
+      account: [YOUR_SNOWFLAKE_ACCOUNT_ID]
+      user: [YOUR_SNOWFLAKE_USERNAME]
+      password: [YOUR_SNOWFLAKE_PASSWORD]
+      database: [YOUR_STAGING_DATABASE_NAME]
+      schema: dbt_staging
+      warehouse: [YOUR_WAREHOUSE_NAME]
+      role: [YOUR_STAGING_ROLE_NAME]
+      threads: 6
+      client_session_keep_alive: false
+
+    # Production environment
+    prod:
+      type: snowflake
+      account: [YOUR_SNOWFLAKE_ACCOUNT_ID]
+      user: [YOUR_SNOWFLAKE_USERNAME]
+      password: [YOUR_SNOWFLAKE_PASSWORD]
+      database: [YOUR_PROD_DATABASE_NAME]
+      schema: dbt_prod
+      warehouse: [YOUR_LARGE_WAREHOUSE_NAME]
+      role: [YOUR_PROD_ROLE_NAME]
+      threads: 8
+      client_session_keep_alive: true
+
+# ============================================================================
+# AUTHENTICATION METHODS
+# ============================================================================
+#
+# Password Authentication (shown above):
+#   Use standard username/password for personal development
+#   Store password in environment variable: export SNOWFLAKE_PASSWORD=[password]
+#
+# Key Pair Authentication (Recommended for CI/CD):
+#   private_key_path: /path/to/rsa_key.p8
+#   private_key_passphrase: [passphrase]
+#
+# SSO Authentication:
+#   authenticator: externalbrowser
+#   (Will open browser for SSO login)
+#
+# Example with environment variables:
+#   account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+#   user: "{{ env_var('SNOWFLAKE_USER') }}"
+#   password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+#   warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE') }}"
+
+# ============================================================================
+# RECOMMENDED SETUP FOR CI/CD (GitHub Actions)
+# ============================================================================
+#
+# 1. Store credentials in GitHub Secrets
+# 2. Use environment variables in your workflow:
+#
+#    - name: Set dbt profile
+#      run: |
+#        mkdir -p ~/.dbt
+#        cat > ~/.dbt/profiles.yml << EOF
+#        dbt_snowflake_starter:
+#          target: prod
+#          outputs:
+#            prod:
+#              type: snowflake
+#              account: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+#              user: ${{ secrets.SNOWFLAKE_USER }}
+#              password: ${{ secrets.SNOWFLAKE_PASSWORD }}
+#              database: ${{ secrets.SNOWFLAKE_DATABASE }}
+#              schema: dbt_prod
+#              warehouse: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+#              role: ${{ secrets.SNOWFLAKE_ROLE }}
+#              threads: 8
+#              client_session_keep_alive: true
+#        EOF
+
+# ============================================================================
+# TROUBLESHOOTING
+# ============================================================================
+#
+# Connection errors?
+#   1. Verify your account ID format: xy12345.us-east-1
+#   2. Check user has appropriate role permissions
+#   3. Confirm warehouse is active and not suspended
+#   4. Run: dbt debug --profiles-dir ~/.dbt
+#
+# Slow queries?
+#   - Increase warehouse size
+#   - Increase threads in dbt profile
+#   - Check Snowflake query history for bottlenecks
+#
+# Schema creation errors?
+#   - Verify role has CREATE SCHEMA permission
+#   - Check database exists and is accessible
+#   - Review Snowflake RBAC configuration

@@ -1,0 +1,291 @@
+# dbt-snowflake-starter .gitignore
+# This file specifies files and directories to exclude from version control
+# Author: Ram Marapally (GitHub: rammarapally)
+
+# ============================================================================
+# dbt-Specific Files and Directories
+# ============================================================================
+
+# dbt build artifacts and compiled models
+target/
+compiled/
+dbt_packages/
+
+# dbt logs and debugging outputs
+logs/
+dbt-debug.log
+
+# dbt temporary files
+*.dbt_tmp.*
+
+# dbt package files (from dbt deps)
+dbt_packages/
+packages.lock.yml
+
+# ============================================================================
+# Sensitive Configuration Files
+# ============================================================================
+
+# dbt profiles.yml - NEVER commit credentials
+profiles.yml
+~/.dbt/profiles.yml
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.production.local
+
+# AWS credentials
+~/.aws/
+
+# Snowflake credentials
+snowflake_creds.yml
+snowflake_config.yml
+
+# SSH keys
+*.pem
+*.key
+*_rsa
+*_rsa.pub
+
+# ============================================================================
+# Python and Virtual Environments
+# ============================================================================
+
+# Python virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# pip files
+pip-log.txt
+pip-delete-this-directory.txt
+requirements-lock.txt
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# pytest cache
+.pytest_cache/
+
+# tox testing
+.tox/
+
+# Coverage reports
+.coverage
+htmlcov/
+
+# mypy type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ============================================================================
+# IDE and Editor Files
+# ============================================================================
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# JetBrains IDEs
+.idea/
+.idea_modules/
+*.iml
+*.iws
+*.ipr
+*.swp
+*.swo
+*~
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+.vim/
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# ============================================================================
+# Build and Distribution Files
+# ============================================================================
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Compiled Python files
+*.pyc
+*.pyo
+
+# ============================================================================
+# Documentation Generation
+# ============================================================================
+
+# dbt docs generate output
+docs/
+manifest.json
+catalog.json
+run_results.json
+
+# ============================================================================
+# Local Development and Testing
+# ============================================================================
+
+# Temporary test files
+tests/local/
+.test_outputs/
+
+# Local data files (for manual testing)
+data/local/
+data/test_data/
+
+# Local analysis scripts
+analysis/local/
+analysis/scratch/
+
+# Temporary notebooks
+notebooks/scratch/
+*.ipynb
+
+# ============================================================================
+# IDE Temporary Files
+# ============================================================================
+
+# Backup files
+*.bak
+*.backup
+*.tmp
+*~
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# ============================================================================
+# CI/CD Specific
+# ============================================================================
+
+# GitHub Actions workflow artifacts (if storing locally)
+.github/artifacts/
+
+# Terraform files (if using IaC)
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+.terraform.lock.hcl
+
+# ============================================================================
+# Documentation Files (Optional)
+# ============================================================================
+
+# Exclude large binary files and archives
+*.zip
+*.tar.gz
+*.rar
+
+# ============================================================================
+# Sensitive Data and Logs
+# ============================================================================
+
+# Log files
+*.log
+*.log.*
+
+# Crash dumps
+*.dump
+
+# Query outputs and temporary results
+results/
+outputs/
+*.csv
+*.xlsx
+*.json
+
+# ============================================================================
+# Project-Specific
+# ============================================================================
+
+# Temporary model testing files
+models/scratch/
+models/temp/
+
+# Analysis and exploratory files
+analysis/scratch/
+
+# Snapshots for development (not production snapshots)
+snapshots/temp/
+snapshots/dev/
+
+# Keep important files
+!README.md
+!.gitkeep
+!.github/
+
+# ============================================================================
+# Notes and Documentation
+# ============================================================================
+
+# Local notes
+NOTES.md
+TODO.md
+scratch.md
+
+# Meeting notes
+meeting_notes/
+
+# ============================================================================
+# Additional Ignores for Safety
+# ============================================================================
+
+# Ensure we never accidentally commit credentials
+*credentials*
+*secrets*
+*password*
+*token*
+
+# Database exports
+*.sql.bak
+dump.sql
+
+# ============================================================================
+# Exception Rules (use ! to unignore)
+# ============================================================================
+
+# Example: If you want to commit a specific config file
+# !models/specific_important_file.sql
+# !macros/important_macro.sql
+
+# Keep important directories even if empty
+!models/.gitkeep
+!tests/.gitkeep
+!macros/.gitkeep
+!analysis/.gitkeep
+!data/.gitkeep
+!snapshots/.gitkeep

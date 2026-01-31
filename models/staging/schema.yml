@@ -1,0 +1,388 @@
+# Data warehouse schema documentation
+# Defines sources, models, columns, tests, and documentation
+# Author: Ram Marapally (GitHub: rammarapally)
+#
+# Purpose:
+#   - Centralized documentation of data lineage
+#   - Automated data quality testing
+#   - Source system mapping and validation
+#   - Column-level documentation for analytics
+
+version: 2
+
+sources:
+  # Raw data layer: direct extractions from source systems
+  - name: raw
+    description: "Raw data extracted directly from operational systems. No transformations applied."
+
+    # Freshness checks: alert if data isn't updated within SLA
+    freshness:
+      warn_after: { count: 12, period: hour }
+      error_after: { count: 24, period: hour }
+
+    # Load checks: dbt will run these tests before processing
+    loaded_at_field: _loaded_at
+    tables:
+      - name: orders
+        description: "Raw order transaction data from the operational database. One record per order placed by customers."
+        columns:
+          - name: order_id
+            description: "Unique identifier for each order. Primary key of the orders table."
+            tests:
+              - unique:
+                  severity: error
+                  config:
+                    where: "order_status NOT IN ('CANCELLED', 'RETURNED')"
+              - not_null:
+                  severity: error
+
+          - name: customer_id
+            description: "Foreign key referencing the customer placing the order."
+            tests:
+              - not_null:
+                  severity: error
+              - relationships:
+                  to: ref('stg_customers')
+                  field: customer_id
+                  severity: warn
+
+          - name: order_number
+            description: "Human-readable order reference number shown on invoices and communications."
+            tests:
+              - not_null:
+                  severity: error
+              - unique:
+                  severity: warn
+
+          - name: order_status
+            description: "Current status of the order (e.g., NEW, PROCESSING, SHIPPED, DELIVERED, CANCELLED, RETURNED)."
+            tests:
+              - not_null:
+                  severity: error
+              - accepted_values:
+                  values:
+                    - NEW
+                    - PROCESSING
+                    - SHIPPED
+                    - DELIVERED
+                    - CANCELLED
+                    - RETURNED
+                  severity: error
+                  config:
+                    where: "_loaded_at >= CURRENT_DATE - 7"
+
+          - name: order_date
+            description: "Date when the order was placed."
+            tests:
+              - not_null:
+                  severity: error
+              - dbt_utils.expression_is_true:
+                  expression: "order_date <= CURRENT_DATE()"
+                  severity: warn
+
+          - name: order_datetime
+            description: "Timestamp (with time zone) when the order was placed."
+            tests:
+              - not_null:
+                  severity: error
+
+          - name: delivery_date
+            description: "Anticipated or actual delivery date. NULL for orders not yet shipped."
+            tests:
+              - relationships:
+                  to: ref('fct_orders')
+                  field: delivery_date
+                  severity: warn
+                  config:
+                    where: "order_status = 'DELIVERED'"
+
+          - name: order_amount
+            description: "Subtotal of order before tax and shipping (in USD)."
+            tests:
+              - not_null:
+                  severity: error
+              - dbt_utils.expression_is_true:
+                  expression: "order_amount >= 0"
+                  severity: error
+
+          - name: tax_amount
+            description: "Tax applied to the order (in USD)."
+            tests:
+              - dbt_utils.expression_is_true:
+                  expression: "tax_amount >= 0"
+                  severity: error
+
+          - name: shipping_amount
+            description: "Shipping cost for the order (in USD)."
+            tests:
+              - dbt_utils.expression_is_true:
+                  expression: "shipping_amount >= 0"
+                  severity: error
+
+          - name: total_amount
+            description: "Total order value including order_amount, tax, and shipping (in USD)."
+            tests:
+              - not_null:
+                  severity: error
+              - dbt_utils.expression_is_true:
+                  expression: "total_amount >= 0"
+                  severity: error
+              - dbt_utils.expression_is_true:
+                  expression: "total_amount = order_amount + tax_amount + shipping_amount"
+                  severity: warn
+                  meta:
+                    description: "Validates that total equals sum of component amounts"
+
+          - name: _loaded_at
+            description: "Timestamp indicating when the record was extracted from the source system."
+            tests:
+              - not_null:
+                  severity: error
+
+      - name: customers
+        description: "Customer master data including contact information and segment classification."
+        columns:
+          - name: customer_id
+            description: "Unique customer identifier. Primary key."
+            tests:
+              - unique:
+                  severity: error
+              - not_null:
+                  severity: error
+
+          - name: customer_name
+            description: "Full name of the customer."
+            tests:
+              - not_null:
+                  severity: error
+
+          - name: email
+            description: "Primary email address for the customer."
+            tests:
+              - unique:
+                  severity: warn
+
+          - name: customer_segment
+            description: "Customer classification (e.g., PREMIUM, STANDARD, NEW, INACTIVE)."
+            tests:
+              - accepted_values:
+                  values:
+                    - PREMIUM
+                    - STANDARD
+                    - NEW
+                    - INACTIVE
+                  severity: warn
+
+models:
+  # Staging layer: cleaned, deduplicated raw data
+  - name: stg_orders
+    description: |
+      Staging model for orders. Cleans and standardizes raw order data from the source system.
+      Applies incremental loading for performance. Removes duplicates and ensures data quality.
+
+      Grain: One record per order
+      Materialization: Incremental (merge strategy)
+      Update Frequency: Daily
+
+    meta:
+      owner: analytics
+      tier: staging
+      schema_version: 1.0
+      documentation_url: "https://docs.example.com/stg_orders"
+
+    columns:
+      - name: order_id
+        description: "Unique order identifier (primary key)."
+        tests:
+          - unique:
+              severity: error
+          - not_null:
+              severity: error
+        meta:
+          dimension: true
+          pii: false
+
+      - name: customer_id
+        description: "Foreign key to customer dimension."
+        tests:
+          - not_null:
+              severity: error
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_id
+              severity: warn
+        meta:
+          dimension: true
+          pii: false
+
+      - name: order_number
+        description: "Human-readable order reference."
+        tests:
+          - not_null:
+              severity: error
+        meta:
+          dimension: true
+          pii: false
+
+      - name: order_status
+        description: "Standardized order status (NEW, PROCESSING, SHIPPED, DELIVERED, CANCELLED, RETURNED)."
+        tests:
+          - not_null:
+              severity: error
+          - accepted_values:
+              values:
+                - NEW
+                - PROCESSING
+                - SHIPPED
+                - DELIVERED
+                - CANCELLED
+                - RETURNED
+              severity: error
+        meta:
+          dimension: true
+          pii: false
+
+      - name: order_date
+        description: "Date when the order was placed."
+        tests:
+          - not_null:
+              severity: error
+        meta:
+          dimension: true
+          sql_type: DATE
+
+      - name: order_datetime
+        description: "Timestamp when the order was placed."
+        tests:
+          - not_null:
+              severity: error
+        meta:
+          dimension: true
+          sql_type: TIMESTAMP
+
+      - name: delivery_date
+        description: "Expected or actual delivery date."
+        meta:
+          dimension: true
+          sql_type: DATE
+
+      - name: order_amount
+        description: "Order subtotal before tax and shipping (USD)."
+        tests:
+          - not_null:
+              severity: error
+          - dbt_utils.expression_is_true:
+              expression: "order_amount >= 0"
+              severity: error
+        meta:
+          metric: true
+          sql_type: "NUMERIC(18,2)"
+
+      - name: tax_amount
+        description: "Tax amount applied to order (USD)."
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "tax_amount >= 0"
+              severity: error
+        meta:
+          metric: true
+          sql_type: "NUMERIC(18,2)"
+
+      - name: shipping_amount
+        description: "Shipping cost (USD)."
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "shipping_amount >= 0"
+              severity: error
+        meta:
+          metric: true
+          sql_type: "NUMERIC(18,2)"
+
+      - name: total_amount
+        description: "Total order value including order_amount, tax, and shipping (USD)."
+        tests:
+          - not_null:
+              severity: error
+          - dbt_utils.expression_is_true:
+              expression: "total_amount >= 0"
+              severity: error
+        meta:
+          metric: true
+          sql_type: "NUMERIC(18,2)"
+
+      - name: order_size_category
+        description: "Derived category based on total_amount (small, medium, large, zero, negative)."
+        tests:
+          - accepted_values:
+              values:
+                - negative
+                - zero
+                - small
+                - medium
+                - large
+              severity: warn
+        meta:
+          dimension: true
+          derived: true
+
+      - name: _loaded_at
+        description: "Timestamp when record was extracted from source system."
+        tests:
+          - not_null:
+              severity: error
+        meta:
+          technical: true
+
+      - name: dbt_created_at
+        description: "Timestamp when dbt model was run."
+        meta:
+          technical: true
+
+      - name: dbt_processed_at
+        description: "Timestamp when this record was processed through the transformation pipeline."
+        meta:
+          technical: true
+
+      - name: dbt_schema
+        description: "Target schema name for this model run."
+        meta:
+          technical: true
+
+      - name: dbt_table_name
+        description: "Table name (matches model name)."
+        meta:
+          technical: true
+
+  - name: stg_customers
+    description: "Staging model for customers. Standardized customer data with deduplication."
+    columns:
+      - name: customer_id
+        description: "Unique customer identifier."
+        tests:
+          - unique:
+              severity: error
+          - not_null:
+              severity: error
+
+      - name: customer_name
+        description: "Customer full name."
+        tests:
+          - not_null:
+              severity: error
+
+      - name: email
+        description: "Primary email address."
+        tests:
+          - unique:
+              severity: warn
+
+      - name: customer_segment
+        description: "Customer classification segment."
+        tests:
+          - accepted_values:
+              values:
+                - PREMIUM
+                - STANDARD
+                - NEW
+                - INACTIVE
+              severity: warn

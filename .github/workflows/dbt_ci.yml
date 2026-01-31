@@ -1,0 +1,315 @@
+name: dbt CI/CD Pipeline
+
+# Trigger configuration
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - feature/**
+    paths:
+      - 'models/**'
+      - 'macros/**'
+      - 'tests/**'
+      - 'dbt_project.yml'
+      - 'requirements.txt'
+  pull_request:
+    branches:
+      - main
+      - develop
+
+# Environment variables
+env:
+  DBT_PROFILES_DIR: ./profiles
+  DBT_VERSION: 1.5.0
+
+# Permissions
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # =========================================================================
+  # dbt Parse and Validation
+  # =========================================================================
+  dbt_parse:
+    name: Parse dbt Project
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: pip install -q -r requirements.txt
+
+      - name: dbt Parse
+        run: dbt parse
+
+      - name: Upload Manifest
+        uses: actions/upload-artifact@v3
+        with:
+          name: dbt-manifest
+          path: target/manifest.json
+
+  # =========================================================================
+  # dbt Run - Execute Models
+  # =========================================================================
+  dbt_run:
+    name: Run dbt Models
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: dbt_parse
+
+    strategy:
+      fail-fast: false
+      matrix:
+        dbt-target: [dev, staging]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: pip install -q -r requirements.txt
+
+      - name: Configure dbt Profile
+        run: |
+          mkdir -p ~/.dbt
+          cat > ~/.dbt/profiles.yml << 'EOF'
+          dbt_snowflake_starter:
+            target: ${{ matrix.dbt-target }}
+            outputs:
+              dev:
+                type: snowflake
+                account: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+                user: ${{ secrets.SNOWFLAKE_USER }}
+                password: ${{ secrets.SNOWFLAKE_PASSWORD }}
+                database: ${{ secrets.SNOWFLAKE_DEV_DATABASE }}
+                schema: dbt_dev
+                warehouse: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+                role: ${{ secrets.SNOWFLAKE_DEV_ROLE }}
+                threads: 4
+                client_session_keep_alive: false
+
+              staging:
+                type: snowflake
+                account: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+                user: ${{ secrets.SNOWFLAKE_USER }}
+                password: ${{ secrets.SNOWFLAKE_PASSWORD }}
+                database: ${{ secrets.SNOWFLAKE_STAGING_DATABASE }}
+                schema: dbt_staging
+                warehouse: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+                role: ${{ secrets.SNOWFLAKE_STAGING_ROLE }}
+                threads: 6
+                client_session_keep_alive: false
+          EOF
+
+      - name: dbt Debug
+        run: dbt debug
+
+      - name: dbt Run
+        run: dbt run --target ${{ matrix.dbt-target }}
+
+      - name: Upload Run Results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: dbt-run-results-${{ matrix.dbt-target }}
+          path: |
+            target/run_results.json
+            target/compiled/
+
+  # =========================================================================
+  # dbt Test - Data Quality Checks
+  # =========================================================================
+  dbt_test:
+    name: Run dbt Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: dbt_run
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: pip install -q -r requirements.txt
+
+      - name: Configure dbt Profile
+        run: |
+          mkdir -p ~/.dbt
+          cat > ~/.dbt/profiles.yml << 'EOF'
+          dbt_snowflake_starter:
+            target: staging
+            outputs:
+              staging:
+                type: snowflake
+                account: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+                user: ${{ secrets.SNOWFLAKE_USER }}
+                password: ${{ secrets.SNOWFLAKE_PASSWORD }}
+                database: ${{ secrets.SNOWFLAKE_STAGING_DATABASE }}
+                schema: dbt_staging
+                warehouse: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+                role: ${{ secrets.SNOWFLAKE_STAGING_ROLE }}
+                threads: 6
+                client_session_keep_alive: false
+          EOF
+
+      - name: dbt Test
+        run: dbt test --target staging
+
+      - name: Generate Test Report
+        if: always()
+        run: |
+          python -c "
+          import json
+          with open('target/run_results.json') as f:
+              results = json.load(f)
+          passed = sum(1 for r in results.get('results', []) if r.get('status') == 'pass')
+          failed = sum(1 for r in results.get('results', []) if r.get('status') == 'fail')
+          print(f'::notice::Test Results - Passed: {passed}, Failed: {failed}')
+          "
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: dbt-test-results
+          path: target/run_results.json
+
+  # =========================================================================
+  # Generate dbt Documentation
+  # =========================================================================
+  dbt_docs:
+    name: Generate dbt Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: dbt_parse
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: pip install -q -r requirements.txt
+
+      - name: dbt Docs Generate
+        run: dbt docs generate
+
+      - name: Upload Documentation
+        uses: actions/upload-artifact@v3
+        with:
+          name: dbt-docs
+          path: |
+            target/catalog.json
+            target/manifest.json
+
+  # =========================================================================
+  # Code Quality Checks
+  # =========================================================================
+  code_quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: pip install -q black flake8 isort
+
+      - name: Check Black Formatting
+        run: black --check macros/ models/ tests/ || true
+
+      - name: Check isort Formatting
+        run: isort --check-only macros/ models/ tests/ || true
+
+      - name: Lint with Flake8
+        run: flake8 macros/ models/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics || true
+
+  # =========================================================================
+  # Comment on Pull Request
+  # =========================================================================
+  comment_pr:
+    name: Comment on Pull Request
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: [dbt_test, dbt_docs]
+
+    steps:
+      - name: Download Test Results
+        uses: actions/download-artifact@v3
+        with:
+          name: dbt-test-results
+
+      - name: Create PR Comment
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('run_results.json', 'utf8'));
+            const passed = results.results.filter(r => r.status === 'pass').length;
+            const failed = results.results.filter(r => r.status === 'fail').length;
+
+            const comment = `## dbt Test Results
+            - ✅ Passed: ${passed}
+            - ❌ Failed: ${failed}
+
+            [View Full Results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+# ============================================================================
+# Required Secrets Configuration
+# ============================================================================
+# Add the following secrets to your GitHub repository:
+#
+# SNOWFLAKE_ACCOUNT - Snowflake account ID (xy12345.us-east-1)
+# SNOWFLAKE_USER - Snowflake username
+# SNOWFLAKE_PASSWORD - Snowflake password
+# SNOWFLAKE_DEV_DATABASE - Development database name
+# SNOWFLAKE_STAGING_DATABASE - Staging database name
+# SNOWFLAKE_WAREHOUSE - Snowflake warehouse name
+# SNOWFLAKE_DEV_ROLE - Development role
+# SNOWFLAKE_STAGING_ROLE - Staging role
+#
+# GitHub Token (GITHUB_TOKEN) is automatically provided
